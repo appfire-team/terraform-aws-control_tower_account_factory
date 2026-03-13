@@ -211,6 +211,18 @@ resource "aws_ssm_parameter" "terraform_project_name" {
   value = var.terraform_project_name
 }
 
+resource "aws_ssm_parameter" "terraform_oidc_integration" {
+  name  = "/aft/config/terraform/oidc-integration"
+  type  = "String"
+  value = var.terraform_oidc_integration
+}
+
+resource "aws_ssm_parameter" "terraform_oidc_aws_audience" {
+  name  = "/aft/config/terraform/oidc-aws-audience"
+  type  = "String"
+  value = var.terraform_oidc_aws_audience
+}
+
 resource "aws_ssm_parameter" "aft_execution_role_name" {
   name  = "/aft/resources/iam/aft-execution-role-name"
   type  = "String"

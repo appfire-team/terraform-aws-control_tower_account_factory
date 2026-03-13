@@ -3,4 +3,6 @@
 
 locals {
   aft_admin_assumed_role_arn = "arn:${data.aws_partition.current.partition}:sts::${data.aws_caller_identity.aft_management.account_id}:assumed-role/AWSAFTAdmin/AWSAFT-Session"
+
+  enable_oidc = var.terraform_oidc_integration && (var.terraform_distribution == "tfc" || var.terraform_distribution == "tfe")
 }

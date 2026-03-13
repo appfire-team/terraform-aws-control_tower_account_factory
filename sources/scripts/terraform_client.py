@@ -128,6 +128,15 @@ def set_environment_variable(
     __post(endpoint, headers, payload)
 
 
+def delete_environment_variable(var_id, workspace_id, api_token):
+    endpoint = "{}/workspaces/{}/vars/{}".format(
+        TERRAFORM_API_ENDPOINT, workspace_id, var_id
+    )
+    headers = __build_standard_headers(api_token)
+
+    __delete(endpoint, headers)
+
+
 def get_workspace_vars(workspace_id, api_token):
     endpoint = "{}/workspaces/{}/vars".format(TERRAFORM_API_ENDPOINT, workspace_id)
     headers = __build_standard_headers(api_token)
@@ -266,7 +275,15 @@ def __delete(endpoint, headers):
     tf_dist = os.environ.get("TF_DISTRIBUTION")
     response = requests.delete(endpoint, headers=headers, verify=tf_dist != "tfe")
     # __handle_errors(response)
-    return response.json()
+
+    # Return json payload if API returns json else check status code
+    try:
+        return response.json()
+    except:
+        if response.status_code >= 200 & response.status_code <= 299:
+            return True
+        else:
+            return False
 
 
 def __handle_errors(response):

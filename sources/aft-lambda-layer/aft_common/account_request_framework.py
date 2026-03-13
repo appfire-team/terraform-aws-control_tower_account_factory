@@ -16,6 +16,7 @@ from aft_common import ddb, sqs
 from aft_common.account_provisioning_framework import ProvisionRoles
 from aft_common.aft_types import AftInvokeAccountCustomizationPayload
 from aft_common.auth import AuthClient
+from aft_common.control_tower import ControlTowerFacade
 from aft_common.exceptions import (
     NoAccountFactoryPortfolioFound,
     ServiceRoleNotAssociated,
@@ -420,38 +421,12 @@ class AccountRequest:
         return False
 
     def provisioning_threshold_reached(self, threshold: int) -> bool:
-        client: ServiceCatalogClient = self.ct_management_session.client(
-            "servicecatalog", config=utils.get_high_retry_botoconfig()
+        logger.info(
+            "Checking for account provisioning in progress via ListEnabledBaselines"
         )
-        logger.info("Checking for account provisioning in progress")
-
-        response = client.scan_provisioned_products(
-            AccessLevelFilter={"Key": "Account", "Value": "self"},
+        ct_facade = ControlTowerFacade(ct_management_session=self.ct_management_session)
+        in_progress_count = ct_facade.get_enabled_baselines_under_change_count()
+        logger.info(
+            f"CT baselines UNDER_CHANGE: {in_progress_count}, threshold: {threshold}"
         )
-        pps = response["ProvisionedProducts"]
-        while "NextPageToken" in response:
-            response = client.scan_provisioned_products(
-                AccessLevelFilter={"Key": "Account", "Value": "self"},
-                PageToken=response["NextPageToken"],
-            )
-            pps.extend(response["ProvisionedProducts"])
-
-        return self.products_in_progress_at_threshold(
-            threshold=threshold, provisioned_products=pps
-        )
-
-    def products_in_progress_at_threshold(
-        self,
-        threshold: int,
-        provisioned_products: List[ProvisionedProductDetailTypeDef],
-    ) -> bool:
-        in_progress_count = 0
-
-        for product in provisioned_products:
-            if product["ProductId"] != self.account_factory_product_id:
-                continue
-            logger.info("Identified CT Product - " + product["Id"])
-            if product["Status"] in ["UNDER_CHANGE", "PLAN_IN_PROGRESS"]:
-                in_progress_count += 1
-
         return in_progress_count >= threshold

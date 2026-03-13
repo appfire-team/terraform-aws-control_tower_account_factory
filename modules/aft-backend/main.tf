@@ -5,6 +5,8 @@ data "aws_caller_identity" "current" {
   provider = aws.primary_region
 }
 
+data "aws_partition" "current" {}
+
 # S3 Resources
 #tfsec:ignore:aws-s3-enable-bucket-logging
 resource "aws_s3_bucket" "primary-backend-bucket" {
@@ -304,6 +306,37 @@ resource "aws_s3_bucket_versioning" "aft_access_logs_primary_backend_bucket" {
 resource "aws_kms_key" "aft_access_logs_primary_backend_bucket" {
   provider            = aws.primary_region
   enable_key_rotation = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableRootAccountAccess"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:${data.aws_partition.current.partition}:iam::${var.aft_management_account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowS3LoggingServiceAccess"
+        Effect    = "Allow"
+        Principal = { Service = "logging.s3.amazonaws.com" }
+        Action = [
+          "kms:GenerateDataKey",
+          "kms:Encrypt"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "aws:SourceArn" = aws_s3_bucket.primary-backend-bucket.arn
+          }
+          StringEquals = {
+            "aws:SourceAccount" = var.aft_management_account_id
+          }
+        }
+      }
+    ]
+  })
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "aft_access_logs_primary_backend_bucket" {

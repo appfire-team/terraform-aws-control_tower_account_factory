@@ -21,7 +21,7 @@ resource "aws_sfn_state_machine" "aft_invoke_customizations_sfn" {
   // Use valid JSON but transform (de-quote) during load to support numeric parameterization
   definition = replace(
     templatefile("${local.state_machine_source}", local.replacements_map),
-    "/\"MaxConcurrency\": \"(\\d+)\"/",
-    "\"MaxConcurrency\": $1"
+    "/\"(MaxConcurrency|NumericLessThan)\": \"(\\d+)\"/",
+    "\"$1\": $2"
   )
 }

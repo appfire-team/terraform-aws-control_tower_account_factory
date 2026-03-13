@@ -21,4 +21,6 @@ module "aft" {
   terraform_api_endpoint = "https://terraform.example.com/api/v2/"
   terraform_token        = "EXAMPLE-uoc1c1qsw7poexampleewjeno1pte3rw"
   terraform_org_name     = "ExampleOrg"
+  # Enable OIDC
+  terraform_oidc_integration = true
 }

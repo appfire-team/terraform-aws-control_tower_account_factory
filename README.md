@@ -57,6 +57,25 @@ Now that you have configured and deployed AWS Control Tower Account Factory for 
 ## Collection of Operational Metrics
 As of version 1.6.0, AFT collects anonymous operational metrics to help AWS improve the quality and features of the solution. For more information, including how to disable this capability, please see the [documentation here](https://docs.aws.amazon.com/controltower/latest/userguide/aft-operational-metrics.html).
 
+## Security Considerations
+
+### HCP Terraform / Terraform Enterprise OIDC Workspace Governance
+
+When you enable the HCP Terraform or Terraform Enterprise OIDC integration (`terraform_oidc_integration = true`), AFT configures the `AWSAFTAdmin` IAM role with a trust policy that allows any workspace within your configured TFC/TFE organization and project to assume the role via OIDC. The trust policy uses a `sub` claim condition scoped to your organization, project, and audience, but uses a wildcard (`workspace:*`) for the workspace name.
+
+**Existing mitigations:**
+- The trust policy is scoped to your specific TFC/TFE **organization**, **project**, and **audience** — only workspaces within the configured project can obtain credentials.
+- The `AWSAFTAdmin` role is limited to `sts:AssumeRole` permissions only (to assume `AWSAFTExecution` and `AWSAFTService` roles). It has no direct permissions to access or modify AWS resources.
+
+**Customer responsibility:**
+
+> **Important:** Workspace governance within your configured TFC/TFE project is your responsibility. Any workspace created within the project specified by `terraform_project_name` can assume the `AWSAFTAdmin` role via OIDC. You should take the following steps to secure your environment:
+
+- **Restrict workspace creation:** Limit who can create new workspaces within the TFC/TFE project used by AFT. Use [TFC/TFE team permissions](https://developer.hashicorp.com/terraform/cloud-docs/users-teams-organizations/permissions) to control workspace management access.
+- **Audit workspace access:** Regularly review the workspaces in your AFT project to ensure only authorized workspaces exist.
+- **Use a dedicated project:** Use a dedicated TFC/TFE project exclusively for AFT workspaces. Avoid sharing the project with unrelated workspaces.
+- **Consider workspace-specific scoping (optional):** For additional security, after deployment you can manually modify the `AWSAFTAdmin` trust policy to replace the `workspace:*` wildcard with explicit workspace names (e.g., `workspace:my-aft-workspace`). Note that this customization must be maintained outside of AFT and re-applied after AFT updates.
+
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -145,6 +164,9 @@ As of version 1.6.0, AFT collects anonymous operational metrics to help AWS impr
 | <a name="input_tags"></a> [tags](#input\_tags) | Map of tags to apply to resources deployed by AFT. | `map(any)` | `null` | no |
 | <a name="input_terraform_api_endpoint"></a> [terraform\_api\_endpoint](#input\_terraform\_api\_endpoint) | API Endpoint for Terraform. Must be in the format of https://xxx.xxx. | `string` | `"https://app.terraform.io/api/v2/"` | no |
 | <a name="input_terraform_distribution"></a> [terraform\_distribution](#input\_terraform\_distribution) | Terraform distribution being used for AFT - valid values are oss, tfc, or tfe | `string` | `"oss"` | no |
+| <a name="input_terraform_oidc_aws_audience"></a> [terraform\_oidc\_aws\_audience](#input\_terraform\_oidc\_aws\_audience) | The audience value to use in run identity tokens for HCP dynamic credentials (OIDC). var.aft\_feature\_hcp\_oidc must be set to true to enable OIDC. | `string` | `"aws.workload.identity"` | no |
+| <a name="input_terraform_oidc_hostname"></a> [terraform\_oidc\_hostname](#input\_terraform\_oidc\_hostname) | The hostname of the TFC or TFE instance to use with AWS when configuring dynamic credentials (OIDC). var.aft\_feature\_hcp\_oidc must be set to true to enable OIDC. | `string` | `"app.terraform.io"` | no |
+| <a name="input_terraform_oidc_integration"></a> [terraform\_oidc\_integration](#input\_terraform\_oidc\_integration) | Enable HCP Terraform’s native OpenID Connect integration with AWS to get dynamic credentials for the AWS provider in your HCP Terraform runs | `bool` | `false` | no |
 | <a name="input_terraform_org_name"></a> [terraform\_org\_name](#input\_terraform\_org\_name) | Organization name for Terraform Cloud or Enterprise | `string` | `"null"` | no |
 | <a name="input_terraform_project_name"></a> [terraform\_project\_name](#input\_terraform\_project\_name) | Project name for Terraform Cloud or Enterprise - project must exist before deployment | `string` | `"Default Project"` | no |
 | <a name="input_terraform_token"></a> [terraform\_token](#input\_terraform\_token) | Terraform token for Cloud or Enterprise | `string` | `"null"` | no |

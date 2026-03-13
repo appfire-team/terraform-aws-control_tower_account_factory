@@ -381,6 +381,36 @@ variable "terraform_api_endpoint" {
   }
 }
 
+variable "terraform_oidc_integration" {
+  description = "Enable HCP Terraform’s native OpenID Connect integration with AWS to get dynamic credentials for the AWS provider in your HCP Terraform runs"
+  type        = bool
+  default     = false
+  validation {
+    condition     = contains([true, false], var.terraform_oidc_integration)
+    error_message = "Valid values for var: aft_feature_tfc_oidc are (true, false)."
+  }
+}
+
+variable "terraform_oidc_aws_audience" {
+  type        = string
+  default     = "aws.workload.identity"
+  description = "The audience value to use in run identity tokens for HCP dynamic credentials (OIDC). var.aft_feature_hcp_oidc must be set to true to enable OIDC."
+  validation {
+    condition     = can(regex("^([a-z0-9]+(-[a-z0-9]+)*\\.)+[a-z]{2,}$", var.terraform_oidc_aws_audience))
+    error_message = "Variable var: terraform_oidc_aws_audience must be a valid FQDN."
+  }
+}
+
+variable "terraform_oidc_hostname" {
+  type        = string
+  default     = "app.terraform.io"
+  description = "The hostname of the TFC or TFE instance to use with AWS when configuring dynamic credentials (OIDC). var.aft_feature_hcp_oidc must be set to true to enable OIDC."
+  validation {
+    condition     = can(regex("^([a-z0-9]+(-[a-z0-9]+)*\\.)+[a-z]{2,}$", var.terraform_oidc_hostname))
+    error_message = "Variable var: terraform_oidc_hostname must be a valid FQDN."
+  }
+}
+
 #########################################
 # AFT VPC Variables
 #########################################

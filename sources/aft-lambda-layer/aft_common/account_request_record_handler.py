@@ -125,21 +125,15 @@ class AccountRequestRecordHandler:
             logger.info("Customization request received")
             self.handle_customization_request()
 
-        # Vending new account
-        elif self.is_create_action and not provisioned_product_exists(
-            record=self.record
-        ):
-            logger.info("New account request received")
-            self.handle_account_request(new_account=True)
-
-        # Importing existing CT account into AFT and triggering customization
-        elif (
-            self.is_create_action
-            and provisioned_product_exists(record=self.record)
-            and not self.control_tower_parameters_updated
-        ):
-            logger.info("Customization request received for existing CT account")
-            self.handle_customization_request()
+        elif self.is_create_action:
+            # Vending new account
+            if not provisioned_product_exists(record=self.record):
+                logger.info("New account request received")
+                self.handle_account_request(new_account=True)
+            # Importing existing CT account into AFT and triggering customization
+            elif not self.control_tower_parameters_updated:
+                logger.info("Customization request received for existing CT account")
+                self.handle_customization_request()
 
         # Updating CT parameter for existing AFT account
         elif self.is_update_action and self.control_tower_parameters_updated:

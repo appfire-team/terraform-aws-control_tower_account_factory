@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 import logging
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from aft_common.aft_utils import (
     get_high_retry_botoconfig,
@@ -13,6 +13,8 @@ from aft_common.constants import SSM_PARAMETER_PATH
 from boto3.session import Session
 
 logger = logging.getLogger("aft")
+
+_ssm_cache: Dict[str, str] = {}
 
 
 @resubmit_request_on_boto_throttle
@@ -49,10 +51,15 @@ def delete_ssm_parameters(session: Session, parameters: Sequence[str]) -> None:
 
 
 def get_ssm_parameter_value(session: Session, param: str, decrypt: bool = False) -> str:
+    cached: Optional[str] = _ssm_cache.get(param)
+    if cached is not None:
+        return cached
+
     client = session.client("ssm")
     logger.info("Getting SSM Parameter " + param)
 
     response = client.get_parameter(Name=param, WithDecryption=decrypt)
 
     param_value: str = response["Parameter"]["Value"]
+    _ssm_cache[param] = param_value
     return param_value

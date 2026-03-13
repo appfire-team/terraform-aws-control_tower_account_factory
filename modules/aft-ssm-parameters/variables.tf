@@ -130,6 +130,14 @@ variable "terraform_token" {
   sensitive = true
 }
 
+variable "terraform_oidc_integration" {
+  type = string
+}
+
+variable "terraform_oidc_aws_audience" {
+  type = string
+}
+
 variable "account_request_repo_name" {
   type = string
 }

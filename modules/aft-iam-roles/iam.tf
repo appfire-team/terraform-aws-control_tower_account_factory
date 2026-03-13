@@ -8,6 +8,11 @@ resource "aws_iam_role" "aft_admin_role" {
   assume_role_policy = templatefile("${path.module}/iam/aft_admin_role_trust_policy.tpl", {
     aft_account_id                       = data.aws_caller_identity.aft_management.account_id
     data_aws_partition_current_partition = data.aws_partition.current.partition
+    oidc_provider_arn                    = local.enable_oidc ? aws_iam_openid_connect_provider.hcp_terraform[0].arn : ""
+    terraform_org_name                   = var.terraform_org_name
+    terraform_project_name               = var.terraform_project_name
+    terraform_oidc_aws_audience          = var.terraform_oidc_aws_audience
+    terraform_oidc_hostname              = var.terraform_oidc_hostname
   })
 }
 

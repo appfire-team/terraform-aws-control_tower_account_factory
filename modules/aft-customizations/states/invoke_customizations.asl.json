@@ -87,7 +87,7 @@
       "Choices": [
         {
           "Variable": "$.running_executions.running_pipelines",
-          "NumericLessThan": 5,
+          "NumericLessThan": "${maximum_concurrent_customizations}",
           "Next": "Execute Pipelines"
         }
       ],

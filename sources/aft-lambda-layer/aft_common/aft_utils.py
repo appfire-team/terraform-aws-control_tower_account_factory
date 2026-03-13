@@ -12,6 +12,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generator,
     Iterable,
     Optional,
     Sequence,
@@ -191,6 +192,25 @@ def get_aws_partition(session: Session, region: Optional[str] = None) -> str:
 
     partition = session.get_partition_for_region(region)
     return partition
+
+
+def yield_from_paginated_api(
+    client: Any,
+    method_name: str,
+    result_key: str,
+    default_value: Sequence[Any] = (),
+    **kwargs: Any,
+) -> Generator[Any, None, None]:
+    """
+    Generic generator that handles nextToken-based pagination for any AWS API.
+    Yields individual items from each page's result_key list.
+    """
+    response = getattr(client, method_name)(**kwargs)
+    yield from response.get(result_key, default_value)
+
+    while token := response.get("nextToken"):
+        response = getattr(client, method_name)(nextToken=token, **kwargs)
+        yield from response.get(result_key, default_value)
 
 
 def yield_batches_from_list(

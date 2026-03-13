@@ -19,6 +19,8 @@ def setup_and_run_workspace(
     role_session_name,
     api_token,
     project_name,
+    hcp_oidc_enabled,
+    hcp_oidc_audience,
 ):
     workspace_id = setup_workspace(
         organization_name,
@@ -27,8 +29,12 @@ def setup_and_run_workspace(
         role_session_name,
         api_token,
         project_name,
+        hcp_oidc_enabled,
+        hcp_oidc_audience,
     )
-    run_id = stage_run(workspace_id, assume_role_arn, role_session_name, api_token)
+    run_id = stage_run(
+        workspace_id, assume_role_arn, role_session_name, api_token, hcp_oidc_enabled
+    )
     return run_id
 
 
@@ -39,6 +45,8 @@ def setup_workspace(
     role_session_name,
     api_token,
     project_name,
+    hcp_oidc_enabled,
+    hcp_oidc_audience,
 ):
     workspace_id = terraform.create_workspace(
         organization_name, workspace_name, api_token, project_name
@@ -48,17 +56,26 @@ def setup_workspace(
             workspace_name, workspace_id
         )
     )
-    set_aws_credentials(workspace_id, assume_role_arn, role_session_name, api_token)
-    print(
-        "Successfully placed AWS credentials on workspace for {}".format(
-            assume_role_arn
+
+    if hcp_oidc_enabled:
+        set_oidc_configuration(
+            workspace_id, assume_role_arn, api_token, hcp_oidc_audience
         )
-    )
+        print("Successfully enabled OIDC on workspace for {}".format(assume_role_arn))
+    else:
+        set_aws_credentials(workspace_id, assume_role_arn, role_session_name, api_token)
+        print(
+            "Successfully placed AWS credentials on workspace for {}".format(
+                assume_role_arn
+            )
+        )
+
     return workspace_id
 
 
-# def stage_run(workspace_id, s3_uri, assume_role_arn, api_token):
-def stage_run(workspace_id, assume_role_arn, role_session_name, api_token):
+def stage_run(
+    workspace_id, assume_role_arn, role_session_name, api_token, hcp_oidc_enabled
+):
     cv_id, upload_url = terraform.create_configuration_version(workspace_id, api_token)
     print("Successfully created a new configuration version: {}".format(cv_id))
     with open(LOCAL_CONFIGURATION_PATH, "rb") as file:
@@ -72,12 +89,16 @@ def stage_run(workspace_id, assume_role_arn, role_session_name, api_token):
     terraform.wait_to_stabilize(
         "configuration-versions", cv_id, ["uploaded"], api_token
     )
-    set_aws_credentials(workspace_id, assume_role_arn, role_session_name, api_token)
-    print(
-        "Successfully placed AWS credentials on workspace for {}".format(
-            assume_role_arn
+
+    # When OIDC is enabled we do not need to set workspaces vars with STS creds
+    if not hcp_oidc_enabled:
+        set_aws_credentials(workspace_id, assume_role_arn, role_session_name, api_token)
+        print(
+            "Successfully placed AWS credentials on workspace for {}".format(
+                assume_role_arn
+            )
         )
-    )
+
     run_id = terraform.create_run(workspace_id, cv_id, api_token)
     print("Successfully created run: {}".format(run_id))
     terraform.wait_to_stabilize(
@@ -96,10 +117,111 @@ def stage_run(workspace_id, assume_role_arn, role_session_name, api_token):
     return run_id
 
 
+def set_oidc_configuration(workspace_id, assume_role_arn, api_token, hcp_oidc_audience):
+    current_vars = terraform.get_workspace_vars(workspace_id, api_token)
+    transformed_current_vars_dict = __transform_workspace_vars(current_vars)
+
+    # Cleanup unwanted vars if enabling OIDC for first time
+    for secret_var in [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+    ]:
+
+        if secret_var in transformed_current_vars_dict:
+            terraform.delete_environment_variable(
+                transformed_current_vars_dict[secret_var],
+                workspace_id,
+                api_token,
+            )
+            print("OIDC enabled, removed var {}".format(secret_var))
+
+    if "TFC_AWS_PROVIDER_AUTH" in transformed_current_vars_dict:
+        terraform.update_environment_variable(
+            transformed_current_vars_dict["TFC_AWS_PROVIDER_AUTH"],
+            "TFC_AWS_PROVIDER_AUTH",
+            "true",  # enable OIDC
+            "Enable OIDC",
+            workspace_id,
+            False,
+            "env",
+            api_token,
+        )
+    else:
+        terraform.set_environment_variable(
+            "TFC_AWS_PROVIDER_AUTH",
+            "true",  # enable OIDC
+            "Enable OIDC",
+            workspace_id,
+            False,
+            "env",
+            api_token,
+        )
+
+    if "TFC_AWS_WORKLOAD_IDENTITY_AUDIENCE" in transformed_current_vars_dict:
+        terraform.update_environment_variable(
+            transformed_current_vars_dict["TFC_AWS_WORKLOAD_IDENTITY_AUDIENCE"],
+            "TFC_AWS_WORKLOAD_IDENTITY_AUDIENCE",
+            hcp_oidc_audience,
+            "AWS Identity Audience",
+            workspace_id,
+            False,
+            "env",
+            api_token,
+        )
+    else:
+        terraform.set_environment_variable(
+            "TFC_AWS_WORKLOAD_IDENTITY_AUDIENCE",
+            hcp_oidc_audience,
+            "AWS Identity Audience",
+            workspace_id,
+            False,
+            "env",
+            api_token,
+        )
+
+    if "TFC_AWS_RUN_ROLE_ARN" in transformed_current_vars_dict:
+        terraform.update_environment_variable(
+            transformed_current_vars_dict["TFC_AWS_RUN_ROLE_ARN"],
+            "TFC_AWS_RUN_ROLE_ARN",
+            assume_role_arn,  # OIDC role
+            "AWS run role arn",
+            workspace_id,
+            False,
+            "env",
+            api_token,
+        )
+    else:
+        terraform.set_environment_variable(
+            "TFC_AWS_RUN_ROLE_ARN",
+            assume_role_arn,  # OIDC role
+            "AWS run role arn",
+            workspace_id,
+            False,
+            "env",
+            api_token,
+        )
+
+
 def set_aws_credentials(workspace_id, assume_role_arn, role_session_name, api_token):
     role_credentials = __assume_role(assume_role_arn, role_session_name)
     current_vars = terraform.get_workspace_vars(workspace_id, api_token)
     transformed_current_vars_dict = __transform_workspace_vars(current_vars)
+
+    # Cleanup unwanted vars if disabling OIDC
+    for secret_var in [
+        "TFC_AWS_PROVIDER_AUTH",
+        "TFC_AWS_RUN_ROLE_ARN",
+        "TFC_AWS_WORKLOAD_IDENTITY_AUDIENCE",
+    ]:
+
+        if secret_var in transformed_current_vars_dict:
+            terraform.delete_environment_variable(
+                transformed_current_vars_dict[secret_var],
+                workspace_id,
+                api_token,
+            )
+            print("OIDC not enabled, removed var {}".format(secret_var))
 
     if "AWS_ACCESS_KEY_ID" in transformed_current_vars_dict:
         terraform.update_environment_variable(
@@ -200,10 +322,15 @@ def set_terraform_variables(workspace_id, input_variables, api_token):
             )
 
 
-def stage_destroy(workspace_id, assume_role_arn, assume_role_session_name, api_token):
-    set_aws_credentials(
-        workspace_id, assume_role_arn, assume_role_session_name, api_token
-    )
+def stage_destroy(
+    workspace_id, assume_role_arn, assume_role_session_name, api_token, hcp_oidc_enabled
+):
+    # When OIDC is enabled we do not need to set workspaces vars with STS creds
+    if not hcp_oidc_enabled:
+        set_aws_credentials(
+            workspace_id, assume_role_arn, assume_role_session_name, api_token
+        )
+
     run_id = terraform.create_destroy_run(workspace_id, api_token)
     # If in a Run there is no resource change, after execution it will be 'planned_and_finished', which can be a stabilized state
     terraform.wait_to_stabilize(
@@ -271,6 +398,8 @@ if __name__ == "__main__":
     parser.add_argument("--terraform_version", type=str, help="Terraform Version")
     parser.add_argument("--config_file", type=str, help="Terraform Config File")
     parser.add_argument("--project_name", type=str, help="Name of the TFE project name")
+    parser.add_argument("--hcp_oidc_enabled", type=str, help="HCP OIDC is enabled")
+    parser.add_argument("--hcp_oidc_audience", type=str, help="HCP OIDC audience")
 
     args = parser.parse_args()
 
@@ -295,4 +424,6 @@ if __name__ == "__main__":
             args.assume_role_session_name,
             args.api_token,
             args.project_name,
+            (args.hcp_oidc_enabled == "true"),
+            args.hcp_oidc_audience,
         )
